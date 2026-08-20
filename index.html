@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Garage Log</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#161513">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#161513;
+    --panel:#1e1c19;
+    --panel-2:#252220;
+    --line:#39352f;
+    --line-soft:#2a2723;
+    --ink:#ece7de;
+    --ink-dim:#a39b8d;
+    --ink-faint:#6f6a60;
+    --orange:#e8622c;
+    --orange-dim:#7a3115;
+    --yellow:#e8b023;
+    --green:#5fa373;
+    --red:#c2503f;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Oswald',Arial Narrow,sans-serif;}
+  .wrap{max-width:900px;margin:0 auto;padding:28px 20px 60px;}
+  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  .masthead{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid var(--orange);padding-bottom:14px;margin-bottom:20px;}
+  .masthead h1{font-size:26px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin:0;}
+  .masthead .plate{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-faint);letter-spacing:2px;text-transform:uppercase;}
+  .masthead .right{display:flex;align-items:center;gap:12px;}
+  .masthead .email{font-size:11px;color:var(--ink-faint);}
+
+  .vehicle-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:20px;}
+  .vpill{padding:8px 14px;border:1px solid var(--line);background:var(--panel);cursor:pointer;font-size:13px;font-weight:500;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-dim);}
+  .vpill.active{border-color:var(--orange);color:var(--orange);background:rgba(232,98,44,0.08);}
+  .vpill.add{border-style:dashed;color:var(--ink-faint);}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin-bottom:22px;}
+  .stat{background:var(--panel);padding:14px 16px;}
+  .stat .lbl{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink-faint);margin-bottom:6px;}
+  .stat .val{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;}
+  .stat .val.due{color:var(--red);}
+
+  .section{margin-bottom:26px;}
+  .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+  .section-head h2{font-size:16px;text-transform:uppercase;letter-spacing:1.5px;font-weight:600;margin:0;color:var(--ink);}
+  .section-head h2 span{color:var(--orange);}
+
+  button{font-family:inherit;cursor:pointer;}
+  .btn{background:transparent;border:1px solid var(--line);color:var(--ink-dim);padding:7px 14px;font-size:12px;letter-spacing:.5px;text-transform:uppercase;font-weight:500;}
+  .btn:hover{border-color:var(--ink-dim);color:var(--ink);}
+  .btn.primary{border-color:var(--orange);color:var(--orange);}
+  .btn.primary:hover{background:rgba(232,98,44,0.1);}
+  .btn.small{padding:4px 9px;font-size:10px;}
+
+  .tire-panel{display:flex;gap:24px;align-items:center;background:var(--panel);border:1px solid var(--line);padding:20px;flex-wrap:wrap;}
+  .tire-diagram{position:relative;width:180px;height:280px;flex-shrink:0;}
+  .car-body{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:70px;height:220px;border:2px solid var(--line);border-radius:30px;background:var(--panel-2);}
+  .wheel{position:absolute;width:56px;height:56px;border:2px solid var(--line);background:var(--panel-2);display:flex;align-items:center;justify-content:center;flex-direction:column;}
+  .wheel .pos-num{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:20px;color:var(--orange);}
+  .wheel .pos-lbl{font-size:8px;letter-spacing:1px;color:var(--ink-faint);text-transform:uppercase;}
+  .wheel.fl{left:6px;top:20px;} .wheel.fr{right:6px;top:20px;}
+  .wheel.rl{left:6px;bottom:20px;} .wheel.rr{right:6px;bottom:20px;}
+  .front-lbl,.rear-lbl{position:absolute;left:50%;transform:translateX(-50%);font-size:9px;letter-spacing:2px;color:var(--ink-faint);text-transform:uppercase;}
+  .front-lbl{top:0;} .rear-lbl{bottom:0;}
+  .tire-info{flex:1;min-width:200px;}
+  .tire-info .last-rot{font-size:12px;color:var(--ink-dim);margin-bottom:10px;}
+  .tire-info .last-rot .mono{color:var(--ink);}
+  .due-badge{display:inline-block;padding:3px 10px;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;border:1px solid var(--green);color:var(--green);}
+  .due-badge.due{border-color:var(--red);color:var(--red);}
+
+  table{width:100%;border-collapse:collapse;}
+  th{text-align:left;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint);font-weight:500;padding:8px 10px;border-bottom:1px solid var(--line);}
+  td{padding:10px;border-bottom:1px solid var(--line-soft);font-size:13px;vertical-align:top;}
+  tr:hover td{background:rgba(255,255,255,0.015);}
+  td.mono{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-dim);white-space:nowrap;}
+  td.notes{color:var(--ink-dim);font-size:12px;}
+  .row-actions{display:flex;gap:6px;}
+  .icon-btn{background:none;border:none;color:var(--ink-faint);font-size:14px;padding:2px 4px;}
+  .icon-btn:hover{color:var(--red);}
+  .empty{padding:30px;text-align:center;color:var(--ink-faint);font-size:13px;border:1px dashed var(--line);}
+
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px;}
+  .modal{background:var(--panel);border:1px solid var(--orange-dim);width:100%;max-width:440px;padding:22px;max-height:90vh;overflow-y:auto;}
+  .modal h3{margin:0 0 16px;font-size:16px;text-transform:uppercase;letter-spacing:1px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px;}
+  input,select,textarea{width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--ink);padding:9px 10px;font-family:inherit;font-size:13px;}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--orange);}
+  textarea{resize:vertical;min-height:60px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .hidden{display:none;}
+  .err{color:var(--red);font-size:11px;margin-top:4px;}
+  .rot-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+  .auth-wrap{max-width:360px;margin:80px auto;padding:0 20px;}
+  .auth-box{background:var(--panel);border:1px solid var(--line);padding:26px;}
+  .auth-box h1{font-size:22px;text-transform:uppercase;letter-spacing:1px;margin:0 0 4px;}
+  .auth-box p.sub{color:var(--ink-faint);font-size:12px;margin:0 0 20px;}
+  .auth-toggle{display:flex;gap:8px;margin-top:14px;font-size:12px;color:var(--ink-faint);}
+  .auth-toggle a{color:var(--orange);text-decoration:none;cursor:pointer;}
+  .spinner{text-align:center;color:var(--ink-faint);padding:60px 0;font-size:13px;}
+</style>
+</head>
+<body>
+<div class="wrap" id="root"></div>
+
+<script>
+const SUPABASE_URL = 'https://perhnhluinfmruvzjmci.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_HznLxImZoYoy6r1b_vPwjg_kQPwcHpU';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let session = null;
+let state = { vehicles: [], activeId: null };
+let authMode = 'login'; // 'login' | 'signup'
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function fmtDate(d){
+  if(!d) return '—';
+  const dt = new Date(d + 'T00:00:00');
+  if(isNaN(dt)) return d;
+  return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+
+// ---------- DATA LOADING ----------
+async function loadAll(){
+  const uidUser = session.user.id;
+  const { data: vehicles } = await sb.from('vehicles').select('*').eq('user_id', uidUser).order('created_at');
+  const vIds = (vehicles||[]).map(v => v.id);
+  let tireSets = [], logs = [], rotations = [];
+  if(vIds.length){
+    const { data: ts } = await sb.from('tire_sets').select('*').in('vehicle_id', vIds);
+    tireSets = ts || [];
+    const { data: ml } = await sb.from('maintenance_logs').select('*').in('vehicle_id', vIds);
+    logs = ml || [];
+    const tsIds = tireSets.map(t => t.id);
+    if(tsIds.length){
+      const { data: rot } = await sb.from('rotations').select('*').in('tire_set_id', tsIds);
+      rotations = rot || [];
+    }
+  }
+  state.vehicles = (vehicles||[]).map(v => ({
+    id: v.id,
+    name: v.name,
+    rotationInterval: v.rotation_interval,
+    driveType: v.drive_type,
+    activeTireSetId: v.active_tire_set_id,
+    logs: logs.filter(l => l.vehicle_id === v.id).map(l => ({
+      id: l.id, date: l.date, odometer: l.odometer, service: l.service, provider: l.provider, notes: l.notes
+    })),
+    tireSets: tireSets.filter(t => t.vehicle_id === v.id).map(t => ({
+      id: t.id, name: t.name, directional: t.directional,
+      rotations: rotations.filter(r => r.tire_set_id === t.id).map(r => ({
+        id: r.id, date: r.date, odometer: r.odometer,
+        positions: { fl: r.fl, fr: r.fr, rl: r.rl, rr: r.rr }
+      }))
+    }))
+  }));
+  if(state.vehicles.length && !state.vehicles.find(v=>v.id===state.activeId)){
+    state.activeId = state.vehicles[0].id;
+  }
+}
+
+function activeVehicle(){ return state.vehicles.find(v => v.id === state.activeId); }
+function getActiveTireSet(v){
+  return v.tireSets.find(s => s.id === v.activeTireSetId) || v.tireSets[0];
+}
+
+// ---------- AUTH RENDER ----------
+function renderAuth(){
+  const root = document.getElementById('root');
+  root.innerHTML = `
+    <div class="auth-wrap">
+      <div class="auth-box">
+        <h1>Garage log</h1>
+        <p class="sub">${authMode === 'login' ? 'Sign in to your garage' : 'Create an account'}</p>
+        <div class="field">
+          <label>Email</label>
+          <input id="aEmail" type="email" placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input id="aPass" type="password" placeholder="••••••••">
+        </div>
+        <div class="err hidden" id="aErr"></div>
+        <button class="btn primary" id="aSubmit" style="width:100%;margin-top:6px;">${authMode === 'login' ? 'Sign in' : 'Sign up'}</button>
+        <div class="auth-toggle">
+          ${authMode === 'login'
+            ? `New here? <a id="aToggle">Create an account</a>`
+            : `Already have an account? <a id="aToggle">Sign in</a>`}
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('aToggle').onclick = () => { authMode = authMode === 'login' ? 'signup' : 'login'; renderAuth(); };
+  document.getElementById('aSubmit').onclick = async () => {
+    const email = document.getElementById('aEmail').value.trim();
+    const password = document.getElementById('aPass').value;
+    const errEl = document.getElementById('aErr');
+    errEl.classList.add('hidden');
+    if(!email || !password){ errEl.textContent = 'Enter an email and password'; errEl.classList.remove('hidden'); return; }
+    let result;
+    if(authMode === 'login'){
+      result = await sb.auth.signInWithPassword({ email, password });
+    } else {
+      result = await sb.auth.signUp({ email, password });
+    }
+    if(result.error){
+      errEl.textContent = result.error.message;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    if(authMode === 'signup' && !result.data.session){
+      errEl.textContent = 'Check your email to confirm your account, then sign in.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    session = result.data.session;
+    root.innerHTML = '<div class="spinner">Loading your garage…</div>';
+    await loadAll();
+    render();
+  };
+}
+
+// ---------- MAIN RENDER ----------
+function renderVehiclePicker(){
+  const row = document.getElementById('vehicleRow');
+  row.innerHTML = '';
+  state.vehicles.forEach(v => {
+    const b = document.createElement('button');
+    b.className = 'vpill' + (v.id === state.activeId ? ' active' : '');
+    b.textContent = v.name;
+    b.onclick = () => { state.activeId = v.id; render(); };
+    row.appendChild(b);
+  });
+  const add = document.createElement('button');
+  add.className = 'vpill add';
+  add.textContent = '+ add vehicle';
+  add.onclick = openVehicleModal;
+  row.appendChild(add);
+}
+
+function render(){
+  const root = document.getElementById('root');
+  root.innerHTML = `
+    <div class="masthead">
+      <h1>Garage log</h1>
+      <div class="right">
+        <span class="email mono">${session.user.email}</span>
+        <button class="btn small" id="btnSignOut">Sign out</button>
+      </div>
+    </div>
+    <div class="vehicle-row" id="vehicleRow"></div>
+    <div id="app"></div>
+  `;
+  document.getElementById('btnSignOut').onclick = async () => {
+    await sb.auth.signOut();
+    session = null; state = { vehicles: [], activeId: null };
+    renderAuth();
+  };
+  renderVehiclePicker();
+  renderVehicleBody();
+}
+
+function renderVehicleBody(){
+  const app = document.getElementById('app');
+  const v = activeVehicle();
+  if(!v){
+    app.innerHTML = `<div class="empty">No vehicles yet. Add one to start logging maintenance.</div>`;
+    return;
+  }
+  const logs = [...v.logs].sort((a,b) => (b.odometer||0) - (a.odometer||0));
+  const lastOdo = logs.length ? Math.max(...logs.map(l=>l.odometer||0)) : 0;
+  const interval = v.rotationInterval || 8000;
+
+  const tset = getActiveTireSet(v);
+  const setRotations = tset ? [...tset.rotations].sort((a,b) => (b.odometer||0) - (a.odometer||0)) : [];
+  const lastRot = setRotations[0];
+  const sinceRot = lastRot ? lastOdo - lastRot.odometer : null;
+  const dueForRot = lastRot ? sinceRot >= interval : true;
+  const positions = lastRot ? lastRot.positions : {fl:'FL',fr:'FR',rl:'RL',rr:'RR'};
+
+  app.innerHTML = `
+    <div class="stats">
+      <div class="stat"><div class="lbl">Last odometer</div><div class="val mono">${lastOdo ? lastOdo.toLocaleString() + ' km' : '—'}</div></div>
+      <div class="stat"><div class="lbl">Service records</div><div class="val mono">${v.logs.length}</div></div>
+      <div class="stat"><div class="lbl">Since last rotation${tset ? ' ('+tset.name+')' : ''}</div><div class="val mono ${dueForRot ? 'due' : ''}">${sinceRot !== null ? sinceRot.toLocaleString() + ' km' : 'log one'}</div></div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>Tire <span>rotation</span></h2><button class="btn primary" id="btnRotate">Log rotation</button></div>
+      <div class="vehicle-row" id="tireSetRow" style="margin-bottom:12px;"></div>
+      <div class="tire-panel">
+        <div class="tire-diagram">
+          <span class="front-lbl">Front</span>
+          <div class="car-body"></div>
+          <div class="wheel fl"><div class="pos-num">${positions.fl}</div><div class="pos-lbl">FL</div></div>
+          <div class="wheel fr"><div class="pos-num">${positions.fr}</div><div class="pos-lbl">FR</div></div>
+          <div class="wheel rl"><div class="pos-num">${positions.rl}</div><div class="pos-lbl">RL</div></div>
+          <div class="wheel rr"><div class="pos-num">${positions.rr}</div><div class="pos-lbl">RR</div></div>
+          <span class="rear-lbl">Rear</span>
+        </div>
+        <div class="tire-info">
+          <div class="last-rot">Set <span class="mono">${tset ? tset.name : '—'}</span> <button class="btn small" id="btnEditSet" style="margin-left:6px;">edit</button></div>
+          <div class="last-rot">Last rotated <span class="mono">${lastRot ? fmtDate(lastRot.date) + ' at ' + lastRot.odometer.toLocaleString() + ' km' : 'never'}</span></div>
+          <div class="last-rot">Rotation interval <span class="mono">${interval.toLocaleString()} km</span> <button class="btn small" id="btnInterval" style="margin-left:6px;">edit</button></div>
+          <div class="last-rot">Setup <span class="mono">${v.driveType || 'RWD'} · ${tset && tset.directional ? 'directional' : 'non-directional'}</span></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+            <span class="due-badge ${dueForRot ? 'due' : ''}">${dueForRot ? 'Rotation due' : 'On schedule'}</span>
+            <button class="btn small" id="btnRotHistory">History (${tset ? tset.rotations.length : 0})</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>Maintenance <span>log</span></h2><button class="btn primary" id="btnAddLog">+ Add entry</button></div>
+      ${logs.length === 0 ? '<div class="empty">No maintenance logged yet. Add your first entry.</div>' : `
+      <table>
+        <thead><tr><th>Date</th><th>Odometer</th><th>Service</th><th>Provider</th><th>Notes</th><th></th></tr></thead>
+        <tbody>
+          ${logs.map(l => `
+            <tr>
+              <td class="mono">${fmtDate(l.date)}</td>
+              <td class="mono">${l.odometer ? l.odometer.toLocaleString()+' km' : '—'}</td>
+              <td>${l.service || '—'}</td>
+              <td>${l.provider || '—'}</td>
+              <td class="notes">${l.notes || ''}</td>
+              <td><div class="row-actions"><button class="icon-btn" data-del="${l.id}" title="delete">✕</button></div></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`}
+    </div>
+  `;
+
+  const setRow = document.getElementById('tireSetRow');
+  v.tireSets.forEach(s => {
+    const b = document.createElement('button');
+    b.className = 'vpill' + (tset && s.id === tset.id ? ' active' : '');
+    b.textContent = s.name;
+    b.onclick = async () => { v.activeTireSetId = s.id; await sb.from('vehicles').update({active_tire_set_id: s.id}).eq('id', v.id); renderVehicleBody(); };
+    setRow.appendChild(b);
+  });
+  const addSet = document.createElement('button');
+  addSet.className = 'vpill add';
+  addSet.textContent = '+ add tire set';
+  addSet.onclick = () => openTireSetModal();
+  setRow.appendChild(addSet);
+
+  document.getElementById('btnAddLog').onclick = () => openLogModal();
+  document.getElementById('btnRotate').onclick = () => openRotationModal();
+  document.getElementById('btnInterval').onclick = () => openIntervalModal();
+  if(document.getElementById('btnEditSet')) document.getElementById('btnEditSet').onclick = () => openTireSetModal(tset);
+  if(document.getElementById('btnRotHistory')) document.getElementById('btnRotHistory').onclick = () => openRotationHistoryModal(tset);
+  app.querySelectorAll('[data-del]').forEach(b => {
+    b.onclick = async () => {
+      await sb.from('maintenance_logs').delete().eq('id', b.getAttribute('data-del'));
+      v.logs = v.logs.filter(l => l.id !== b.getAttribute('data-del'));
+      renderVehicleBody();
+    };
+  });
+}
+
+function closeModal(){ const bg = document.querySelector('.modal-bg'); if(bg) bg.remove(); }
+
+// ---------- VEHICLE MODAL ----------
+function openVehicleModal(){
+  closeModal();
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `
+    <div class="modal">
+      <h3>Add vehicle</h3>
+      <div class="field"><label>Name</label><input id="vName" placeholder="2012 GMC Sierra 1500"><div class="err hidden" id="vErr">Enter a name first</div></div>
+      <div class="field"><label>Rotation interval (km)</label><input id="vInterval" type="number" value="8000" min="1000" step="500"></div>
+      <div class="field"><label>Drive type</label>
+        <select id="vDrive"><option value="FWD">FWD</option><option value="RWD">RWD</option><option value="AWD">AWD</option><option value="4x4">4x4 / 4WD</option></select>
+      </div>
+      <div class="modal-actions"><button class="btn" id="vCancel">Cancel</button><button class="btn primary" id="vSave">Add vehicle</button></div>
+    </div>`;
+  document.body.appendChild(bg);
+  document.getElementById('vCancel').onclick = closeModal;
+  document.getElementById('vSave').onclick = async () => {
+    const name = document.getElementById('vName').value.trim();
+    if(!name){ document.getElementById('vErr').classList.remove('hidden'); return; }
+    const interval = parseInt(document.getElementById('vInterval').value) || 8000;
+    const driveType = document.getElementById('vDrive').value;
+    const { data: vRow, error } = await sb.from('vehicles').insert({
+      user_id: session.user.id, name, rotation_interval: interval, drive_type: driveType
+    }).select().single();
+    if(error){ alert(error.message); return; }
+    const { data: tsRow } = await sb.from('tire_sets').insert({
+      vehicle_id: vRow.id, name: 'Primary set', directional: false
+    }).select().single();
+    await sb.from('vehicles').update({ active_tire_set_id: tsRow.id }).eq('id', vRow.id);
+    state.vehicles.push({
+      id: vRow.id, name: vRow.name, rotationInterval: vRow.rotation_interval, driveType: vRow.drive_type,
+      activeTireSetId: tsRow.id, logs: [],
+      tireSets: [{ id: tsRow.id, name: tsRow.name, directional: tsRow.directional, rotations: [] }]
+    });
+    state.activeId = vRow.id;
+    closeModal(); render();
+  };
+}
+
+// ---------- TIRE SET MODAL ----------
+function openTireSetModal(existing){
+  closeModal();
+  const v = activeVehicle();
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `
+    <div class="modal">
+      <h3>${existing ? 'Edit tire set' : 'Add tire set'}</h3>
+      <div class="field"><label>Name</label><input id="sName" placeholder="Winter tires" value="${existing ? existing.name : ''}"><div class="err hidden" id="sErr">Enter a name first</div></div>
+      <div class="field"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="sDirectional" style="width:auto;" ${existing && existing.directional ? 'checked' : ''}> Tires are directional (don't swap side to side)</label></div>
+      <div class="modal-actions">
+        ${existing && v.tireSets.length > 1 ? '<button class="btn" id="sDelete" style="color:var(--red);border-color:var(--red);margin-right:auto;">Delete set</button>' : ''}
+        <button class="btn" id="sCancel">Cancel</button>
+        <button class="btn primary" id="sSave">${existing ? 'Save' : 'Add set'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(bg);
+  document.getElementById('sCancel').onclick = closeModal;
+  document.getElementById('sName').oninput = () => document.getElementById('sErr').classList.add('hidden');
+  const delBtn = document.getElementById('sDelete');
+  if(delBtn){
+    delBtn.onclick = async () => {
+      await sb.from('tire_sets').delete().eq('id', existing.id);
+      v.tireSets = v.tireSets.filter(s => s.id !== existing.id);
+      if(v.activeTireSetId === existing.id){
+        v.activeTireSetId = v.tireSets[0].id;
+        await sb.from('vehicles').update({ active_tire_set_id: v.activeTireSetId }).eq('id', v.id);
+      }
+      closeModal(); renderVehicleBody();
+    };
+  }
+  document.getElementById('sSave').onclick = async () => {
+    const name = document.getElementById('sName').value.trim();
+    if(!name){ document.getElementById('sErr').classList.remove('hidden'); return; }
+    const directional = document.getElementById('sDirectional').checked;
+    if(existing){
+      await sb.from('tire_sets').update({ name, directional }).eq('id', existing.id);
+      existing.name = name; existing.directional = directional;
+    } else {
+      const { data: row } = await sb.from('tire_sets').insert({ vehicle_id: v.id, name, directional }).select().single();
+      v.tireSets.push({ id: row.id, name: row.name, directional: row.directional, rotations: [] });
+      v.activeTireSetId = row.id;
+      await sb.from('vehicles').update({ active_tire_set_id: row.id }).eq('id', v.id);
+    }
+    closeModal(); renderVehicleBody();
+  };
+}
+
+// ---------- INTERVAL MODAL ----------
+function openIntervalModal(){
+  closeModal();
+  const v = activeVehicle();
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `
+    <div class="modal">
+      <h3>Rotation interval</h3>
+      <div class="field"><label>Kilometers between rotations</label><input id="iVal" type="number" value="${v.rotationInterval || 8000}" min="1000" step="500"></div>
+      <div class="modal-actions"><button class="btn" id="iCancel">Cancel</button><button class="btn primary" id="iSave">Save</button></div>
+    </div>`;
+  document.body.appendChild(bg);
+  document.getElementById('iCancel').onclick = closeModal;
+  document.getElementById('iSave').onclick = async () => {
+    const val = parseInt(document.getElementById('iVal').value) || 8000;
+    await sb.from('vehicles').update({ rotation_interval: val }).eq('id', v.id);
+    v.rotationInterval = val;
+    closeModal(); renderVehicleBody();
+  };
+}
+
+// ---------- ROTATION ----------
+function computeNextRotation(pos, driveType, directional){
+  if(directional) return { fl: pos.rl, fr: pos.rr, rl: pos.fl, rr: pos.fr };
+  if(driveType === 'FWD') return { fl: pos.rl, fr: pos.rr, rl: pos.fr, rr: pos.fl };
+  return { fl: pos.rr, fr: pos.rl, rl: pos.fl, rr: pos.fr };
+}
+
+function openRotationModal(){
+  closeModal();
+  const v = activeVehicle();
+  const tset = getActiveTireSet(v);
+  if(!tset){ alert('Add a tire set first.'); return; }
+  const lastRot = [...tset.rotations].sort((a,b) => (b.odometer||0) - (a.odometer||0))[0];
+  const curPos = lastRot ? lastRot.positions : {fl:'FL',fr:'FR',rl:'RL',rr:'RR'};
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `
+    <div class="modal">
+      <h3>Log rotation — ${tset.name}</h3>
+      <div class="two-col">
+        <div class="field"><label>Date</label><input id="rDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="field"><label>Odometer (km)</label><input id="rOdo" type="number" min="0" placeholder="215000"><div class="err hidden" id="rErr">Enter an odometer reading</div></div>
+      </div>
+      <div class="field"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="rDirectional" style="width:auto;" ${tset.directional ? 'checked' : ''}> This set is directional (don't swap side to side)</label></div>
+      <div class="field">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;"><label style="margin:0;">New tire positions</label><button type="button" class="btn small" id="btnAutoRotate">Rotate ↻</button></div>
+        <div style="font-size:11px;color:var(--ink-faint);margin-bottom:8px;">${v.driveType || 'RWD'} — rotate auto-shuffles based on drive type and the directional setting above</div>
+        <div class="rot-grid">
+          <div><label style="font-size:10px;">Front left</label><input id="pFL" value="${curPos.fl}"></div>
+          <div><label style="font-size:10px;">Front right</label><input id="pFR" value="${curPos.fr}"></div>
+          <div><label style="font-size:10px;">Rear left</label><input id="pRL" value="${curPos.rl}"></div>
+          <div><label style="font-size:10px;">Rear right</label><input id="pRR" value="${curPos.rr}"></div>
+        </div>
+      </div>
+      <div class="modal-actions"><button class="btn" id="rCancel">Cancel</button><button class="btn primary" id="rSave">Save rotation</button></div>
+    </div>`;
+  document.body.appendChild(bg);
+  document.getElementById('rCancel').onclick = closeModal;
+  document.getElementById('btnAutoRotate').onclick = () => {
+    const directional = document.getElementById('rDirectional').checked;
+    const next = computeNextRotation(curPos, v.driveType || 'RWD', directional);
+    document.getElementById('pFL').value = next.fl;
+    document.getElementById('pFR').value = next.fr;
+    document.getElementById('pRL').value = next.rl;
+    document.getElementById('pRR').value = next.rr;
+  };
+  document.getElementById('rSave').onclick = async () => {
+    const odoVal = document.getElementById('rOdo').value;
+    if(!odoVal){ document.getElementById('rErr').classList.remove('hidden'); return; }
+    const directional = document.getElementById('rDirectional').checked;
+    if(directional !== tset.directional){
+      await sb.from('tire_sets').update({ directional }).eq('id', tset.id);
+      tset.directional = directional;
+    }
+    const positions = {
+      fl: document.getElementById('pFL').value.trim() || 'FL',
+      fr: document.getElementById('pFR').value.trim() || 'FR',
+      rl: document.getElementById('pRL').value.trim() || 'RL',
+      rr: document.getElementById('pRR').value.trim() || 'RR'
+    };
+    const { data: row } = await sb.from('rotations').insert({
+      tire_set_id: tset.id, date: document.getElementById('rDate').value, odometer: parseInt(odoVal),
+      fl: positions.fl, fr: positions.fr, rl: positions.rl, rr: positions.rr
+    }).select().single();
+    tset.rotations.push({ id: row.id, date: row.date, odometer: row.odometer, positions });
+    closeModal(); renderVehicleBody();
+  };
+}
+
+function openRotationHistoryModal(tset){
+  closeModal();
+  if(!tset) return;
+  const rows = [...tset.rotations].sort((a,b) => (b.odometer||0) - (a.odometer||0));
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `
+    <div class="modal" style="max-width:560px;">
+      <h3>Rotation history — ${tset.name}</h3>
+      ${rows.length === 0 ? '<div class="empty">No rotations logged for this set yet.</div>' : `
+      <table>
+        <thead><tr><th>Date</th><th>Odometer</th><th>Positions</th><th></th></tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td class="mono">${fmtDate(r.date)}</td>
+              <td class="mono">${r.odometer ? r.odometer.toLocaleString()+' km' : '—'}</td>
+              <td class="mono" style="font-size:11px;">FL ${r.positions.fl} · FR ${r.positions.fr} · RL ${r.positions.rl} · RR ${r.positions.rr}</td>
+              <td><button class="icon-btn" data-delrot="${r.id}" title="delete">✕</button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`}
+      <div class="modal-actions"><button class="btn primary" id="hClose">Close</button></div>
+    </div>`;
+  document.body.appendChild(bg);
+  document.getElementById('hClose').onclick = closeModal;
+  bg.querySelectorAll('[data-delrot]').forEach(b => {
+    b.onclick = async () => {
+      const id = b.getAttribute('data-delrot');
+      await sb.from('rotations').delete().eq('id', id);
+      tset.rotations = tset.rotations.filter(r => r.id !== id);
+      openRotationHistoryModal(tset);
+      renderVehicleBody();
+    };
+  });
+}
+
+// ---------- MAINTENANCE LOG ----------
+function openLogModal(){
+  closeModal();
+  const v = activeVehicle();
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.innerHTML = `
+    <div class="modal">
+      <h3>Add maintenance entry</h3>
+      <div class="two-col">
+        <div class="field"><label>Date</label><input id="lDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="field"><label>Odometer (km)</label><input id="lOdo" type="number" min="0" placeholder="215000"><div class="err hidden" id="oErr">Enter an odometer reading</div></div>
+      </div>
+      <div class="field"><label>Service performed</label><textarea id="lService" placeholder="Oil change, brake pads, etc."></textarea></div>
+      <div class="field"><label>Provider</label><input id="lProvider" placeholder="Shop name or your own name"></div>
+      <div class="field"><label>Notes</label><textarea id="lNotes" placeholder="Parts used, torque specs, anything worth remembering"></textarea></div>
+      <div class="modal-actions"><button class="btn" id="lCancel">Cancel</button><button class="btn primary" id="lSave">Save entry</button></div>
+    </div>`;
+  document.body.appendChild(bg);
+  document.getElementById('lCancel').onclick = closeModal;
+  document.getElementById('lSave').onclick = async () => {
+    const odoVal = document.getElementById('lOdo').value;
+    if(!odoVal){ document.getElementById('oErr').classList.remove('hidden'); return; }
+    const payload = {
+      vehicle_id: v.id, date: document.getElementById('lDate').value, odometer: parseInt(odoVal),
+      service: document.getElementById('lService').value.trim(),
+      provider: document.getElementById('lProvider').value.trim(),
+      notes: document.getElementById('lNotes').value.trim()
+    };
+    const { data: row } = await sb.from('maintenance_logs').insert(payload).select().single();
+    v.logs.push({ id: row.id, date: row.date, odometer: row.odometer, service: row.service, provider: row.provider, notes: row.notes });
+    closeModal(); renderVehicleBody();
+  };
+}
+
+// ---------- INIT ----------
+(async function init(){
+  const root = document.getElementById('root');
+  root.innerHTML = '<div class="spinner">Loading…</div>';
+  const { data } = await sb.auth.getSession();
+  session = data.session;
+  if(session){
+    await loadAll();
+    render();
+  } else {
+    renderAuth();
+  }
+  sb.auth.onAuthStateChange((event, s) => {
+    if(event === 'SIGNED_OUT'){ session = null; state = { vehicles: [], activeId: null }; renderAuth(); }
+  });
+})();
+</script>
+</body>
+</html>
